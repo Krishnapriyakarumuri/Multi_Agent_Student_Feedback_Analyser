@@ -1,0 +1,59 @@
+# requirements.txt (Root)
+# Main dependencies for the entire project
+
+# Backend
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+pydantic==2.5.3
+sqlalchemy==2.0.25
+psycopg2-binary==2.9.9
+redis==5.0.1
+pandas==2.1.5
+numpy==1.26.3
+
+# AI/ML
+sentence-transformers==2.2.2
+transformers==4.37.2
+torch==2.1.2
+bertopic==0.16.0
+scikit-learn==1.4.0
+
+# Azure OpenAI
+openai==1.7.2
+
+# Monitoring
+opentelemetry-api==1.22.0
+opentelemetry-sdk==1.22.0
+
+# Utilities
+python-dotenv==1.0.0
+requests==2.31.0
+
+
+# backend/requirements.txt
+# Same as root but for container build
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+pydantic==2.5.3
+sqlalchemy==2.0.25
+psycopg2-binary==2.9.9
+redis==5.0.1
+pandas==2.1.5
+numpy==1.26.3
+sentence-transformers==2.2.2
+transformers==4.37.2
+torch==2.1.2
+bertopic==0.16.0
+scikit-learn==1.4.0
+openai==1.7.2
+python-dotenv==1.0.0
+
+
+# frontend/requirements.txt
+streamlit==1.30.0
+plotly==5.18.0
+pandas==2.1.5
+requests==2.31.0
+python-dotenv==1.0.0

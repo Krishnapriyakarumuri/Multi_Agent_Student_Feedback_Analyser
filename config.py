@@ -17,6 +17,10 @@ class Config:
     AZURE_OPENAI_KEY: Optional[str] = os.getenv("AZURE_OPENAI_KEY", "demo-key")
     AZURE_OPENAI_ENDPOINT: Optional[str] = os.getenv("AZURE_OPENAI_ENDPOINT", "https://demo.openai.azure.com/")
     GPT_MODEL: str = "gpt-4o-mini"
+
+    # Groq (recommendations + theme label generation)
+    GROQ_API_KEY: Optional[str] = os.getenv("GROQ_API_KEY", "")
+    GROQ_MODEL: str = "llama-3.1-8b-instant"   # fast & capable; change to llama-3.3-70b-versatile for richer output
     GPT_MAX_TOKENS: int = 300
     GPT_TEMPERATURE: float = 0.7
     

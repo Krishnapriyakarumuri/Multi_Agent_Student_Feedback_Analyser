@@ -3,6 +3,8 @@ from agents.base_agent import BaseAgent
 from typing import Dict, Any
 import json
 import time
+import groq
+from config import config
 
 class RecommendationAgent(BaseAgent):
     """
@@ -14,7 +16,7 @@ class RecommendationAgent(BaseAgent):
         super().__init__(
             name="Recommendation Agent",
             role="Strategic Advisor & Action Generator",
-            tools=["gpt_reasoner", "context_synthesizer"]
+            tools=["groq_reasoner", "context_synthesizer"]
         )
         self.client = None
     
@@ -56,48 +58,46 @@ class RecommendationAgent(BaseAgent):
         }
     
     def _generate_recommendation(self, theme, sentiment, bias):
-        """Generate recommendation - uses GPT or falls back to demo mode"""
+        """Generate recommendation - uses Groq or falls back to demo mode"""
         
         theme_name = theme.get("topic_name", theme.get("theme_name", "Unknown"))
         keywords = theme.get("keywords", [])
         sentiment_label = sentiment.get("label", "neutral")
         
-        # Try GPT first, fallback to demo
+        # Try Groq first, fallback to demo
         try:
-            from openai import AzureOpenAI
-            from config import config
             
-            if config.AZURE_OPENAI_KEY and "demo" not in config.AZURE_OPENAI_KEY:
+            if config.GROQ_API_KEY and config.GROQ_API_KEY.strip():
                 if self.client is None:
-                    self.client = AzureOpenAI(
-                        api_key=config.AZURE_OPENAI_KEY,
-                        api_version="2024-02-15-preview",
-                        azure_endpoint=config.AZURE_OPENAI_ENDPOINT
-                    )
+                    self.client = groq.Groq(api_key=config.GROQ_API_KEY)
                 
-                prompt = f"""
-                Theme: {theme_name}
-                Keywords: {keywords[:10]}
-                Sentiment: {sentiment_label}
-                Bias Notes: {bias if bias else 'None'}
-                
-                Generate recommendation in JSON format with:
-                recommendation, priority, action_items, expected_impact, fairness_note
-                """
+                prompt = f"""Theme: {theme_name}
+Keywords: {keywords[:10]}
+Sentiment: {sentiment_label}
+Bias Notes: {bias if bias else 'None'}
+
+Generate a recommendation as a JSON object with these exact keys:
+- recommendation: Main recommendation (2-3 sentences)
+- priority: one of "high", "medium", or "low"
+- action_items: list of 3-5 specific actionable steps
+- expected_impact: what improvement to expect
+- fairness_note: how bias was considered (if applicable)
+
+Return ONLY valid JSON, no extra text."""
                 
                 response = self.client.chat.completions.create(
-                    model=config.GPT_MODEL,
+                    model=config.GROQ_MODEL,
                     messages=[
                         {"role": "system", "content": self.system_prompt},
                         {"role": "user", "content": prompt}
                     ],
-                    max_tokens=300,
-                    temperature=0.7,
+                    max_tokens=config.GPT_MAX_TOKENS,
+                    temperature=config.GPT_TEMPERATURE,
                     response_format={"type": "json_object"}
                 )
                 return json.loads(response.choices[0].message.content)
         except Exception as e:
-            print(f"GPT not available: {e}")
+            print(f"Groq not available: {e}")
         
         # Demo fallback recommendations
         return self._demo_recommendation(theme_name, sentiment_label)

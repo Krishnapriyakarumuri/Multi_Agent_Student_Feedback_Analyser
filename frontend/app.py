@@ -1,140 +1,140 @@
-# frontend/app.py
+# frontend/app.py - Main Navigation & Auth Guard
 import streamlit as st
 import requests
-import pandas as pd
-import plotly.express as px
 from datetime import datetime
 
-st.set_page_config(page_title="Multi-Agent Feedback Analyzer", page_icon="🤖", layout="wide")
+st.set_page_config(
+    page_title="Student Feedback Analyzer",
+    page_icon="🤖",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
+# Global API URL
 API_URL = "http://localhost:8000/api/v1"
 
-st.title("🤖 Multi-Agent Student Feedback Intelligence Platform")
-st.markdown("### AI Agents working together to analyze institutional feedback")
+# Auth Guard: Redirect to login if not authenticated
+def check_authentication():
+    if "user_id" not in st.session_state or not st.session_state.user_id:
+        st.switch_page("pages/0_Login.py")
 
-# Sidebar
+check_authentication()
+
+# Global Styling
+st.markdown("""
+    <style>
+    :root {
+        --bg-primary: #0f1117;
+        --bg-secondary: #1a1f2e;
+        --accent: #7c3aed;
+        --success: #10b981;
+        --warning: #f59e0b;
+        --danger: #ef4444;
+    }
+    
+    /* Dark mode background */
+    [data-testid="stAppViewContainer"] {
+        background: linear-gradient(135deg, #0f1117 0%, #1a1f2e 100%);
+    }
+    
+    /* Sidebar styling */
+    [data-testid="stSidebar"] {
+        background: rgba(26, 31, 46, 0.8);
+        border-right: 1px solid rgba(124, 58, 237, 0.1);
+    }
+    
+    /* Card styling */
+    .metric-card {
+        background: rgba(26, 31, 46, 0.6);
+        border: 1px solid rgba(124, 58, 237, 0.2);
+        border-radius: 12px;
+        padding: 16px;
+        backdrop-filter: blur(10px);
+    }
+    
+    /* Priority badges */
+    .priority-high {
+        background: rgba(239, 68, 68, 0.1);
+        border-left: 4px solid #ef4444;
+        color: #fca5a5;
+    }
+    .priority-medium {
+        background: rgba(245, 158, 11, 0.1);
+        border-left: 4px solid #f59e0b;
+        color: #fcd34d;
+    }
+    .priority-low {
+        background: rgba(16, 185, 129, 0.1);
+        border-left: 4px solid #10b981;
+        color: #86efac;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# Sidebar Navigation
 with st.sidebar:
-    st.header("📤 Upload Feedback")
-    uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
+    st.markdown("---")
     
-    if uploaded_file and st.button("🚀 Deploy Agents", type="primary"):
-        with st.spinner("Orchestrator deploying agents..."):
-            files = {"file": uploaded_file}
-            response = requests.post(f"{API_URL}/feedback/upload", files=files)
-            if response.status_code == 200:
-                data = response.json()
-                st.session_state.job_id = data["job_id"]
-                st.success(f"✅ {len(data['agents_involved'])} agents deployed!")
+    # User Info
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.markdown(f"**👤 {st.session_state.get('username', 'User')}**")
+        role_badge = "👑 Admin" if st.session_state.get("role") == "admin" else "👁️ Viewer"
+        st.markdown(f"<small>{role_badge}</small>", unsafe_allow_html=True)
     
-    st.divider()
-    st.header("🤖 Agent Status")
-    if st.button("Refresh Agent Status"):
-        response = requests.get(f"{API_URL}/agents/status")
-        if response.status_code == 200:
-            agents = response.json()
-            for agent in agents.get("agent_details", []):
-                emoji = "🟢" if agent["status"] == "online" else "🔴"
-                st.text(f"{emoji} {agent['name']}")
+    with col2:
+        if st.button("🚪", help="Logout"):
+            st.session_state.user_id = None
+            st.session_state.username = None
+            st.session_state.role = None
+            st.switch_page("pages/0_Login.py")
+    
+    st.markdown("---")
+    
+    # Navigation
+    st.markdown("### 📋 Navigation")
+    pages = {
+        "📤 Upload Feedback": "pages/1_Upload_Feedback.py",
+        "📊 Dashboard": "pages/2_Agent_Dashboard.py",
+        "💡 Themes": "pages/3_Theme_Discovery.py",
+        "😊 Sentiment": "pages/4_Sentiment_Analysis.py",
+        "⚖️ Bias Report": "pages/5_Bias_Report.py",
+        "✨ Recommendations": "pages/6_Recommendations.py",
+    }
+    
+    for page_name, page_file in pages.items():
+        if st.button(page_name, use_container_width=True):
+            st.switch_page(page_file)
+    
+    st.markdown("---")
 
-# Main content
-col1, col2, col3, col4 = st.columns(4)
-col1.metric("Agents Online", "6", "All active")
-col2.metric("Tasks Completed", "245", "+18%")
-col3.metric("Themes Discovered", "12", "Dynamic")
-col4.metric("Bias Flags", "3", "Under review")
+# Main Page
+st.markdown("<h1 style='text-align: center;'>🤖 Multi-Agent Student Feedback Intelligence Platform</h1>", unsafe_allow_html=True)
+st.markdown("<h3 style='text-align: center;'>AI Agents working together to analyze institutional feedback</h3>", unsafe_allow_html=True)
 
-# Job progress
-if "job_id" in st.session_state:
-    st.divider()
-    st.header("🔄 Agent Processing Pipeline")
-    
-    job_id = st.session_state.job_id
-    
-    # Initialize session state for polling
-    if "polling_active" not in st.session_state:
-        st.session_state.polling_active = True
-        st.session_state.poll_count = 0
-    
-    # Create placeholders for real-time updates
-    progress_container = st.container()
-    queue_container = st.container()
-    worker_status_container = st.container()
-    debug_container = st.container()
-    
-    # Poll once per rerun
-    if st.session_state.polling_active:
-        st.session_state.poll_count += 1
-        
-        try:
-            response = requests.get(f"{API_URL}/jobs/{job_id}/detailed-status", timeout=3)
-            if response.status_code == 200:
-                status = response.json()
-                
-                with progress_container:
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        progress_percent = status.get("progress_percent", 0)
-                        st.progress(min(progress_percent / 100, 1.0))
-                        st.text(f"Progress: {progress_percent:.1f}%")
-                    
-                    with col2:
-                        st.metric("Status", status["status"])
-                
-                with queue_container:
-                    st.subheader("📊 Agent Queue Status")
-                    
-                    agents = status.get("agents_involved", [])
-                    queue_status = status.get("queue_status", {})
-                    
-                    # Create queue visualization
-                    queue_data = []
-                    for agent in agents:
-                        depth = queue_status.get(agent, 0)
-                        is_completed = agent in status.get("completed_agents", [])
-                        queue_data.append({
-                            "Agent": agent,
-                            "Tasks in Queue": depth,
-                            "Status": "✅ Complete" if is_completed else "⏳ Processing" if depth > 0 else "⏹️ Idle"
-                        })
-                    
-                    df_queues = pd.DataFrame(queue_data)
-                    st.dataframe(df_queues, width='stretch', hide_index=True)
-                
-                with worker_status_container:
-                    current_agent = status.get('current_agent', 'unknown')
-                    completed = ', '.join(status['completed_agents']) if status['completed_agents'] else 'None'
-                    st.caption(f"Current: {current_agent} | Completed: {completed}")
-                
-                if status["status"] == "completed":
-                    st.success("✅ Pipeline Complete! All agents finished processing.")
-                    st.balloons()
-                    st.session_state.polling_active = False
-                else:
-                    # Trigger rerun after 2 seconds
-                    import time
-                    time.sleep(2)
-                    st.rerun()
-            else:
-                with debug_container:
-                    st.warning(f"⚠️ API returned status {response.status_code}")
-                st.session_state.polling_active = False
-        
-        except requests.exceptions.Timeout:
-            with debug_container:
-                st.warning("⚠️ Request timed out (server might be slow)")
-            import time
-            time.sleep(3)
-            st.rerun()
-        
-        except requests.exceptions.ConnectionError:
-            with debug_container:
-                st.error("❌ Cannot connect to server. Is it running on port 8000?")
-            st.session_state.polling_active = False
-        
-        except Exception as e:
-            with debug_container:
-                st.warning(f"⚠️ Error: {str(e)}")
-            st.session_state.polling_active = False
+# Welcome message
+st.info(f"✅ Logged in as **{st.session_state.get('username')}** ({st.session_state.get('role')})")
 
-st.divider()
-st.caption(f"Multi-Agent System v1.0 | {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+# Quick start guide
+st.markdown("""
+### 🚀 Quick Start Guide
+
+1. **Upload Feedback** - Go to the Upload page and upload your CSV with student feedback
+2. **View Dashboard** - Monitor KPIs, sentiment trends, and top themes
+3. **Review Recommendations** - See AI-generated recommendations with priority levels
+4. **Manage Issues** - Admins can mark recommendations as resolved
+
+#### 📊 Dashboard Features
+- **KPI Cards**: Total feedback, sentiment breakdown, critical issues
+- **Charts**: Theme distribution, sentiment trends, keyword analysis
+- **Top Recommendations**: Prioritized action items to improve the institution
+
+#### ✨ Recommendation System
+- **Priority Levels**: High 🔴 | Medium 🟡 | Low 🟢
+- **Action Items**: Specific steps to implement recommendations
+- **Admin Controls**: Mark recommendations as resolved (admin only)
+""")
+
+# Footer
+st.markdown("---")
+st.caption(f"🛡️ Multi-Agent Student Feedback Intelligence Platform | v1.0 | {datetime.now().strftime('%Y-%m-%d %H:%M')}")

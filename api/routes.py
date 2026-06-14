@@ -149,6 +149,29 @@ async def health_check():
     """Quick health check endpoint"""
     return {"status": "ok", "message": "Server is running"}
 
+@router.get("/dashboard/summary")
+async def get_dashboard_summary():
+    """Get KPI summary for dashboard"""
+    return long_term_memory.get_dashboard_summary()
+
+@router.get("/recommendations/with-meta")
+async def get_recommendations_with_metadata():
+    """Get all unresolved recommendations with full metadata and theme info"""
+    return {"recommendations": long_term_memory.get_recommendations_with_meta()}
+
+@router.patch("/recommendations/{rec_id}/resolve")
+async def resolve_recommendation(rec_id: str):
+    """Admin: Mark recommendation as implemented"""
+    success = long_term_memory.mark_recommendation_resolved(rec_id)
+    if success:
+        return {"status": "resolved", "recommendation_id": rec_id}
+    raise HTTPException(404, "Recommendation not found")
+
+@router.get("/dashboard/charts")
+async def get_chart_data():
+    """Get data for dashboard charts"""
+    return long_term_memory.get_chart_data()
+
 @router.get("/jobs/{job_id}/detailed-status")
 async def get_detailed_job_status(job_id: str):
     """Get detailed status showing which tasks are in which queue"""

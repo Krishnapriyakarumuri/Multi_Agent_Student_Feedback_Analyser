@@ -43,10 +43,15 @@ class RecommendationAgent(BaseAgent):
         # Generate recommendation (with GPT or demo fallback)
         result = self._generate_recommendation(theme, sentiment, bias)
         
+        theme_name = theme.get("topic_name", theme.get("theme_name", "Unknown"))
+        theme_id = theme.get("theme_id", 0)
+        
         self.think(f"Recommendation: {result.get('recommendation', '')[:100]}...", "done", f"Priority: {result.get('priority')}")
         
         return {
             "feedback_id": feedback_id,
+            "theme_id": theme_id,
+            "theme_name": theme_name,
             "recommendation_text": result.get("recommendation", ""),
             "priority": result.get("priority", "medium"),
             "action_items": result.get("action_items", []),

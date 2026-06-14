@@ -50,7 +50,9 @@ CREATE TABLE IF NOT EXISTS bias_checks (
 
 CREATE TABLE IF NOT EXISTS recommendations (
     id VARCHAR(36) PRIMARY KEY,
+    feedback_id VARCHAR(36) REFERENCES feedback(id),
     theme_id INTEGER,
+    theme_name VARCHAR(200),
     recommendation_text TEXT,
     priority VARCHAR(10),
     action_items JSONB,

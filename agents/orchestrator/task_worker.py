@@ -10,9 +10,11 @@ import threading
 from typing import Dict, Any
 from communication.memory_bus import AgentMessageBus, InMemoryMessageBus
 from memory.working_memory import WorkingMemory
+from memory.long_term_memory import LongTermMemory
 import logging
 import time
 import inspect
+import uuid
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -35,6 +37,7 @@ class TaskWorker:
         else:
             self.message_bus = AgentMessageBus()
         self.working_memory = WorkingMemory()
+        self.long_term_memory = LongTermMemory()
         self.running = False
         self.processed_count = 0
         self.worker_threads = []
@@ -130,9 +133,19 @@ class TaskWorker:
                             # Pipeline complete
                             logger.info(f"🎉 [{agent_name}] Pipeline complete for {message.task_id[:8]}!")
                             
-                            # Store final result
+                            # Store final result in working memory
                             self.working_memory.set(f"result:{message.task_id}", result)
                             self.message_bus.update_task_progress(message.task_id, "COMPLETED")
+                            
+                            # CRITICAL: Save results to long-term memory (database) so UI can fetch them
+                            try:
+                                self._save_results_to_database(task_data, result)
+                                logger.info(f"✅ Results saved to database for {message.task_id[:8]}")
+                            except Exception as e:
+                                logger.error(f"❌ Failed to save results to database: {str(e)}", exc_info=True)
+                                logger.error("⚠️  TIP: If you see 'table has no column' error, delete the database file and restart the server")
+                                # Don't crash - pipeline completed successfully even if DB save failed
+                                pass
                         
                         self.processed_count += 1
                         
@@ -146,6 +159,90 @@ class TaskWorker:
             except Exception as e:
                 logger.error(f"❌ [{agent_name}] Listener error: {str(e)}", exc_info=True)
                 time.sleep(1)  # Backoff on error
+    
+    def _save_results_to_database(self, task_data: Dict[str, Any], result: Dict[str, Any]):
+        """
+        Save pipeline results to long-term memory (database).
+        Extracts sentiment, theme, bias, recommendation results and persists them.
+        """
+        job_id = task_data.get("job_id", "unknown")
+        feedback_id = task_data.get("feedback_id", "unknown")
+        
+        # Save Feedback record
+        feedback_record = {
+            "id": feedback_id,
+            "job_id": job_id,
+            "original_text": result.get("original_text", task_data.get("text", "")),
+            "cleaned_text": result.get("cleaned_text", ""),
+            "text_hash": result.get("text_hash", ""),
+            "is_valid": result.get("is_valid", True),
+            "processed_by": "preprocessing"
+        }
+        self.long_term_memory.save_feedback(feedback_record)
+        
+        # Save Sentiment Analysis
+        if "sentiment" in result:
+            sentiment = result.get("sentiment", {})
+            sentiment_record = {
+                "id": str(uuid.uuid4()),
+                "feedback_id": feedback_id,
+                "label": sentiment.get("label", "neutral"),
+                "score": sentiment.get("score", 0),
+                "confidence": sentiment.get("confidence", "low"),
+                "processed_by": "sentiment"
+            }
+            self.long_term_memory.save_sentiment(sentiment_record)
+        
+        # Save Theme Assignment
+        if "theme" in result:
+            theme = result.get("theme", {})
+            theme_record = {
+                "id": str(uuid.uuid4()),
+                "feedback_id": feedback_id,
+                "theme_id": theme.get("theme_id", theme.get("topic_id", 0)),
+                "theme_name": theme.get("topic_name", theme.get("theme_name", "Unknown")),
+                "keywords": theme.get("keywords", []),
+                "probability": theme.get("probability", 0.0),
+                "is_outlier": theme.get("is_outlier", False),
+                "processed_by": "theme"
+            }
+            self.long_term_memory.save_theme(theme_record)
+        
+        # Save Bias Check
+        if "bias_guardrails" in result or "is_biased" in result:
+            bias_record = {
+                "id": str(uuid.uuid4()),
+                "feedback_id": feedback_id,
+                "is_biased": result.get("is_biased", False),
+                "bias_type": result.get("bias_type", ""),
+                "severity": result.get("bias_severity", 0.0),
+                "flagged_terms": result.get("flagged_terms", []),
+                "explanation": result.get("bias_explanation", ""),
+                "requires_human_review": result.get("requires_human_review", False),
+                "has_educational_value": result.get("has_educational_value", True),
+                "processed_by": "bias"
+            }
+            self.long_term_memory.save_bias_check(bias_record)
+        
+        # Save Recommendation
+        if "recommendation_text" in result or "recommendation" in result:
+            recommendation_record = {
+                "id": str(uuid.uuid4()),
+                "feedback_id": feedback_id,
+                "theme_id": result.get("theme_id", 0),
+                "theme_name": result.get("theme_name", "Unknown"),
+                "recommendation_text": result.get("recommendation_text", result.get("recommendation", "")),
+                "priority": result.get("priority", "medium"),
+                "action_items": result.get("action_items", []),
+                "expected_impact": result.get("expected_impact", ""),
+                "fairness_note": result.get("fairness_note", ""),
+                "implemented": False,
+                "upstream_agents": result.get("upstream_agents", []),
+                "processed_by": "recommendation"
+            }
+            self.long_term_memory.save_recommendation(recommendation_record)
+        
+        logger.info(f"💾 Persisted all results for feedback {feedback_id} to database")
     
     def get_status(self) -> Dict[str, Any]:
         """Get worker status"""

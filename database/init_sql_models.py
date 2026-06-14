@@ -5,6 +5,14 @@ from datetime import datetime
 
 Base = declarative_base()
 
+class User(Base):
+    __tablename__ = "users"
+    id = Column(String(36), primary_key=True, default=lambda: str(__import__('uuid').uuid4()))
+    username = Column(String(50), unique=True, nullable=False)
+    password_hash = Column(String(256), nullable=False)
+    role = Column(String(20), default="viewer")  # admin or viewer
+    created_at = Column(DateTime, default=datetime.now)
+
 class Feedback(Base):
     __tablename__ = "feedback"
     id = Column(String(36), primary_key=True)
@@ -55,7 +63,9 @@ class BiasCheck(Base):
 class Recommendation(Base):
     __tablename__ = "recommendations"
     id = Column(String(36), primary_key=True, default=lambda: str(__import__('uuid').uuid4()))
+    feedback_id = Column(String(36))
     theme_id = Column(Integer)
+    theme_name = Column(String(200))
     recommendation_text = Column(Text)
     priority = Column(String(10))
     action_items = Column(JSON)

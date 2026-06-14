@@ -53,7 +53,6 @@ Pages available:
 | Recommendations | Groq API (LLaMA 3.1) |
 | Memory | Redis + PostgreSQL |
 | Monitoring | OpenTelemetry |
-| Deployment | Docker + Docker Compose |
 
 ---
 

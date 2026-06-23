@@ -227,6 +227,8 @@ class TaskWorker:
                 "is_biased": task_data.get("is_biased", False),
                 "bias_type": task_data.get("bias_type", ""),
                 "severity": task_data.get("severity", 0.0),
+                "reliability_score": task_data.get("reliability_score", 1.0),
+                "is_anomaly": task_data.get("is_anomaly", False),
                 "flagged_terms": task_data.get("detected_indicators", []),
                 "explanation": task_data.get("explanation", ""),
                 "requires_human_review": task_data.get("requires_human_review", False),

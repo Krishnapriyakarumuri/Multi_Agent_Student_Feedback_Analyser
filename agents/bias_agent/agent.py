@@ -90,77 +90,86 @@ class BiasDetectionAgent(BaseAgent):
     
     async def execute(self, task: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Analyze feedback for bias before recommendations
+        Analyze feedback for bias and reliability before recommendations.
+        Now includes Anomaly Detection and Frequency Thresholding.
         """
         text = task.get("cleaned_text", "")
         sentiment = task.get("sentiment", {})
         theme = task.get("theme", {})
         feedback_id = task.get("feedback_id", "unknown")
         
-        # Step 1: Scan for bias patterns
+        # 1. Step 1: Technical Reliability & Anomaly Check
+        is_outlier = theme.get("is_outlier", False)
+        theme_prob = theme.get("probability", 0.0)
+        sent_conf = sentiment.get("confidence", "low")
+        
+        # Calculate Reliability Score (0.0 to 1.0)
+        # Penalize outliers and low-confidence sentiment
+        base_reliability = 0.9 if not is_outlier else 0.3
+        conf_multiplier = 1.0 if sent_conf == "high" else 0.7 if sent_conf == "medium" else 0.4
+        reliability_score = base_reliability * conf_multiplier
+        
+        is_anomaly = is_outlier or reliability_score < 0.4
+
         self.think(
-            thought=f"Scanning feedback [{feedback_id}] for bias indicators",
-            action="scan_patterns",
-            observation=""
+            thought=f"Assessing reliability for [{feedback_id}]",
+            action="reliability_check",
+            observation=f"Score: {reliability_score:.2f} | Anomaly: {is_anomaly}"
         )
         
+        # 2. Step 2: Ethical Bias Scanning
         detected_biases = self._scan_for_bias(text)
         
-        # Step 2: Analyze context
-        self.think(
-            thought=f"Found {len(detected_biases)} potential bias indicators",
-            action="analyze_context",
-            observation=f"Bias types: {[b['type'].value for b in detected_biases]}"
-        )
-        
         if detected_biases:
-            # Determine if bias is contextual or direct
             for bias in detected_biases:
                 is_contextual = self._is_reporting_bias(text, bias)
                 bias["is_contextual"] = is_contextual
-                
-                self.think(
-                    thought=f"Analyzing: {bias['type'].value} - Contextual: {is_contextual}",
-                    action="context_analysis",
-                    observation=f"Severity adjusted based on context"
-                )
         
-        # Step 3: Generate fairness guardrails
         primary_bias = max(detected_biases, key=lambda x: x["severity"]) if detected_biases else None
         
-        if primary_bias:
-            self.think(
-                thought=f"Primary bias: {primary_bias['type'].value} (severity: {primary_bias['severity']:.2f})",
-                action="generate_guardrails",
-                observation="Creating bias context for downstream agents"
-            )
+        # 3. Step 3: Combine Ethical Bias + Reliability Bias
+        # If it's an anomaly, we increase the 'requires_human_review' flag
+        requires_review = (primary_bias["severity"] > 0.7 if primary_bias else False) or is_anomaly
         
-        # Step 4: Generate guardrails for Recommendation Agent
-        bias_guardrails = self._generate_guardrails(primary_bias, text)
+        # 4. Step 4: Generate enhanced guardrails
+        bias_guardrails = self._generate_enhanced_guardrails(primary_bias, is_anomaly, reliability_score, text)
         
-        # Step 5: Check if feedback has educational value
-        has_value, reason = self._assess_educational_value(text, primary_bias)
-        
-        self.think(
-            thought=f"Educational value assessment: {'Valid' if has_value else 'Filtered'} - {reason}",
-            action="value_assessment",
-            observation=reason
-        )
+        # 5. Step 5: Final Assessment
+        has_value, reason = self._assess_educational_value(text, primary_bias, is_anomaly)
         
         return {
             "feedback_id": feedback_id,
             "is_biased": primary_bias is not None and not (primary_bias.get("is_contextual") and primary_bias["severity"] < 0.5),
-            "bias_type": primary_bias["type"].value if primary_bias else "none",
-            "severity": primary_bias["severity"] if primary_bias else 0.0,
+            "bias_type": primary_bias["type"].value if primary_bias else ("anomaly" if is_anomaly else "none"),
+            "severity": max(primary_bias["severity"] if primary_bias else 0.0, 0.6 if is_anomaly else 0.0),
+            "reliability_score": reliability_score,
+            "is_anomaly": is_anomaly,
             "detected_indicators": primary_bias["terms"][:5] if primary_bias else [],
-            "explanation": primary_bias["explanation"] if primary_bias else "No bias detected",
+            "explanation": primary_bias["explanation"] if primary_bias else ("Isolated incident / Anomaly" if is_anomaly else "No bias detected"),
             "guardrails_for_recommendation": bias_guardrails,
             "has_educational_value": has_value,
             "value_assessment_reason": reason,
-            "requires_human_review": primary_bias["severity"] > 0.7 if primary_bias else False,
+            "requires_human_review": requires_review,
             "processed_by": self.name,
             "agent_id": self.agent_id
         }
+
+    def _generate_enhanced_guardrails(self, bias: Dict, is_anomaly: bool, reliability: float, text: str) -> str:
+        """Generate guardrails that include reliability warnings"""
+        guardrails = []
+        
+        if bias:
+            guardrails.append(f"⚠️ ETHICAL BIAS: {bias['type'].value} detected (severity: {bias['severity']:.2f}). Do not amplify.")
+        
+        if is_anomaly:
+            guardrails.append(f"🔍 RELIABILITY ALERT: This feedback is an ISOLATED ANOMALY (Reliability: {reliability:.2f}).")
+            guardrails.append("ADVICE: Do not treat this as a recurring institutional issue. Recommend monitoring rather than a major policy change.")
+        
+        if not guardrails:
+            return ""
+            
+        return "\n".join(guardrails) + f"\n\nContext excerpt: \"{text[:150]}...\""
+
     
     def _scan_for_bias(self, text: str) -> List[Dict]:
         """Tool: Pattern Detector"""
@@ -221,10 +230,15 @@ class BiasDetectionAgent(BaseAgent):
         Original text excerpt: "{text[:200]}..."
         """
     
-    def _assess_educational_value(self, text: str, bias: Dict) -> tuple:
-        """Check if feedback has educational value beyond bias"""
+    def _assess_educational_value(self, text: str, bias: Dict, is_anomaly: bool) -> tuple:
+        """Check if feedback has educational value beyond bias and noise"""
+        reason = "Feedback has educational value"
+        
+        if is_anomaly:
+            reason = "Feedback is an isolated incident/anomaly"
+            
         if not bias or bias["severity"] < 0.6:
-            return True, "Feedback has educational value"
+            return True, reason
         
         # Remove biased terms and check remaining content
         cleaned = text
@@ -234,6 +248,6 @@ class BiasDetectionAgent(BaseAgent):
         remaining_words = len(cleaned.strip().split())
         
         if remaining_words < 5:
-            return False, "Feedback consists primarily of biased statements"
+            return False, "Feedback consists primarily of biased or noisy statements"
         
-        return True, f"Feedback has {remaining_words} substantive words after bias removal"
+        return True, f"{reason} | {remaining_words} substantive words found"

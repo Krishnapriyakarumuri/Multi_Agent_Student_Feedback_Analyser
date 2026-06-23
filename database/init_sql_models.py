@@ -55,6 +55,8 @@ class BiasCheck(Base):
     severity = Column(Float)
     flagged_terms = Column(JSON)
     explanation = Column(Text)
+    reliability_score = Column(Float, default=1.0)
+    is_anomaly = Column(Boolean, default=False)
     requires_human_review = Column(Boolean, default=False)
     has_educational_value = Column(Boolean, default=True)
     processed_by = Column(String(100))

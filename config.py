@@ -19,7 +19,7 @@ class Config:
     GPT_MODEL: str = "gpt-4o-mini"
 
     # Groq (recommendations + theme label generation)
-    GROQ_API_KEY: Optional[str] = os.getenv("GROQ_API_KEY", "gsk_xxxxxxxxxxxxxxxxxxx")
+    GROQ_API_KEY: Optional[str] = os.getenv("GROQ_API_KEY", "gsk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
     GROQ_MODEL: str = "llama-3.3-70b-versatile" 
     GPT_MAX_TOKENS: int = 500
     GPT_TEMPERATURE: float = 0.7

@@ -163,26 +163,37 @@ class TaskWorker:
     def _save_results_to_database(self, task_data: Dict[str, Any], result: Dict[str, Any]):
         """
         Save pipeline results to long-term memory (database).
-        Extracts sentiment, theme, bias, recommendation results and persists them.
+        Uses canonical feedback_id (resolved via text_hash) so re-uploading
+        the same CSV never produces duplicate records in any table.
         """
         job_id = task_data.get("job_id", "unknown")
         feedback_id = task_data.get("feedback_id", "unknown")
         
-        # Save Feedback record
+        # ── Step 1: Save Feedback ─────────────────────────────────────────────
+        # save_feedback deduplicates by text_hash and returns the CANONICAL id.
+        # If the same text was processed in a prior run, it returns the OLD id.
+        # IMPORTANT: preprocessing fields live in task_data (accumulated pipeline
+        # state), NOT in result (which is only the last agent's output).
         feedback_record = {
             "id": feedback_id,
             "job_id": job_id,
-            "original_text": result.get("original_text", task_data.get("text", "")),
-            "cleaned_text": result.get("cleaned_text", ""),
-            "text_hash": result.get("text_hash", ""),
-            "is_valid": result.get("is_valid", True),
+            "original_text": task_data.get("original_text", task_data.get("text", "")),
+            "cleaned_text": task_data.get("cleaned_text", ""),
+            "text_hash": task_data.get("text_hash", ""),  # <-- key fix: was result.get()
+            "is_valid": task_data.get("is_valid", True),
             "processed_by": "preprocessing"
         }
-        self.long_term_memory.save_feedback(feedback_record)
+        canonical_id = self.long_term_memory.save_feedback(feedback_record)
         
-        # Save Sentiment Analysis
-        if "sentiment" in result:
-            sentiment = result.get("sentiment", {})
+        # ── Step 2: Use canonical id for all child tables ─────────────────────
+        # This ensures cross-run duplicates are caught: all child-table save_*
+        # methods check for an existing row by this feedback_id and skip if found.
+        if canonical_id:
+            feedback_id = canonical_id
+        
+        # ── Step 3: Save Sentiment Analysis ───────────────────────────────────
+        if "sentiment" in task_data:
+            sentiment = task_data.get("sentiment", {})
             sentiment_record = {
                 "id": str(uuid.uuid4()),
                 "feedback_id": feedback_id,
@@ -193,9 +204,9 @@ class TaskWorker:
             }
             self.long_term_memory.save_sentiment(sentiment_record)
         
-        # Save Theme Assignment
-        if "theme" in result:
-            theme = result.get("theme", {})
+        # ── Step 4: Save Theme Assignment ─────────────────────────────────────
+        if "theme" in task_data:
+            theme = task_data.get("theme", {})
             theme_record = {
                 "id": str(uuid.uuid4()),
                 "feedback_id": feedback_id,
@@ -208,23 +219,23 @@ class TaskWorker:
             }
             self.long_term_memory.save_theme(theme_record)
         
-        # Save Bias Check
-        if "bias_guardrails" in result or "is_biased" in result:
+        # ── Step 5: Save Bias Check ───────────────────────────────────────────
+        if "is_biased" in task_data:
             bias_record = {
                 "id": str(uuid.uuid4()),
                 "feedback_id": feedback_id,
-                "is_biased": result.get("is_biased", False),
-                "bias_type": result.get("bias_type", ""),
-                "severity": result.get("bias_severity", 0.0),
-                "flagged_terms": result.get("flagged_terms", []),
-                "explanation": result.get("bias_explanation", ""),
-                "requires_human_review": result.get("requires_human_review", False),
-                "has_educational_value": result.get("has_educational_value", True),
+                "is_biased": task_data.get("is_biased", False),
+                "bias_type": task_data.get("bias_type", ""),
+                "severity": task_data.get("severity", 0.0),
+                "flagged_terms": task_data.get("detected_indicators", []),
+                "explanation": task_data.get("explanation", ""),
+                "requires_human_review": task_data.get("requires_human_review", False),
+                "has_educational_value": task_data.get("has_educational_value", True),
                 "processed_by": "bias"
             }
             self.long_term_memory.save_bias_check(bias_record)
         
-        # Save Recommendation
+        # ── Step 6: Save Recommendation ──────────────────────────────────────
         if "recommendation_text" in result or "recommendation" in result:
             recommendation_record = {
                 "id": str(uuid.uuid4()),

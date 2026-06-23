@@ -18,10 +18,24 @@ class SentimentAnalyzer:
         return self.pipeline
     
     def analyze(self, text: str) -> Dict:
+        """Analyze text and normalize label to 'positive', 'neutral', or 'negative'"""
         pipe = self.load_model()
         result = pipe(text)[0]
         
-        label = self.LABEL_MAP.get(result['label'], 'neutral')
+        # Get raw label from model (can be 'LABEL_1' or 'neutral')
+        raw_label = result['label']
+        
+        # 1. Try LABEL_MAP first for numeric labels
+        label = self.LABEL_MAP.get(raw_label)
+        
+        # 2. If not in map, maybe it's already a correct string label?
+        if not label:
+            if raw_label.lower() in ['positive', 'neutral', 'negative']:
+                label = raw_label.lower()
+            else:
+                # Default to neutral if completely unknown
+                label = 'neutral'
+        
         score = result['score']
         confidence = "high" if score > 0.8 else "medium" if score > 0.6 else "low"
         

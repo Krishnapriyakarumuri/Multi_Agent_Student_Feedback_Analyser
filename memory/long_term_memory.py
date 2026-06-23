@@ -1,4 +1,5 @@
 # memory/long_term_memory.py
+import logging
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from config import config
@@ -8,6 +9,8 @@ from database.init_sql_models import (
 )
 from typing import List, Optional
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 class LongTermMemory:
     """Long-term memory for agents (PostgreSQL)"""
@@ -62,17 +65,31 @@ class LongTermMemory:
             logging.getLogger(__name__).warning(f"⚠️ SQLite auto-migration failed: {e}")
     
     def save_feedback(self, data: dict):
+        """Save feedback, skipping if same text_hash already exists (deduplication)"""
         session = self.Session()
         try:
+            # Deduplicate by text_hash: same text content should not be re-inserted
+            text_hash = data.get("text_hash")
+            if text_hash:
+                existing = session.query(Feedback).filter_by(text_hash=text_hash).first()
+                if existing:
+                    logger.debug(f"⏭️  Skipping duplicate feedback (hash={text_hash[:8]}...)")
+                    return existing.id  # Return existing ID so callers can use it
             fb = Feedback(**data)
             session.add(fb)
             session.commit()
+            return fb.id
         finally:
             session.close()
     
     def save_sentiment(self, data: dict):
+        """Save sentiment, skipping if one already exists for this feedback_id"""
         session = self.Session()
         try:
+            existing = session.query(SentimentAnalysis).filter_by(feedback_id=data["feedback_id"]).first()
+            if existing:
+                logger.debug(f"⏭️  Skipping duplicate sentiment for feedback {data['feedback_id'][:8]}")
+                return
             sa = SentimentAnalysis(**data)
             session.add(sa)
             session.commit()
@@ -80,8 +97,13 @@ class LongTermMemory:
             session.close()
     
     def save_theme(self, data: dict):
+        """Save theme assignment, skipping if one already exists for this feedback_id"""
         session = self.Session()
         try:
+            existing = session.query(ThemeAssignment).filter_by(feedback_id=data["feedback_id"]).first()
+            if existing:
+                logger.debug(f"⏭️  Skipping duplicate theme for feedback {data['feedback_id'][:8]}")
+                return
             ta = ThemeAssignment(**data)
             session.add(ta)
             session.commit()
@@ -89,8 +111,13 @@ class LongTermMemory:
             session.close()
     
     def save_bias_check(self, data: dict):
+        """Save bias check, skipping if one already exists for this feedback_id"""
         session = self.Session()
         try:
+            existing = session.query(BiasCheck).filter_by(feedback_id=data["feedback_id"]).first()
+            if existing:
+                logger.debug(f"⏭️  Skipping duplicate bias check for feedback {data['feedback_id'][:8]}")
+                return
             bc = BiasCheck(**data)
             session.add(bc)
             session.commit()
@@ -98,8 +125,15 @@ class LongTermMemory:
             session.close()
     
     def save_recommendation(self, data: dict):
+        """Save recommendation, skipping if one already exists for this theme_name (unique per theme)"""
         session = self.Session()
         try:
+            # Group recommendations by theme name to avoid duplicates per theme
+            theme_name = data.get("theme_name", "Unknown")
+            existing = session.query(Recommendation).filter_by(theme_name=theme_name, implemented=False).first()
+            if existing:
+                logger.debug(f"Combined recommendation already exists for theme: {theme_name}")
+                return
             rec = Recommendation(**data)
             session.add(rec)
             session.commit()

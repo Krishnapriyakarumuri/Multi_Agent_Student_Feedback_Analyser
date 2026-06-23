@@ -108,7 +108,10 @@ Return ONLY valid JSON, no extra text."""
         return self._demo_recommendation(theme_name, sentiment_label)
     
     def _demo_recommendation(self, theme, sentiment):
-        """Generate demo recommendations without GPT"""
+        """Generate high-quality demo recommendations without GPT"""
+        
+        # Determine priority based on sentiment if not specifically set
+        auto_priority = "high" if sentiment == "negative" else "medium"
         
         demo_recs = {
             "placement": {
@@ -136,24 +139,76 @@ Return ONLY valid JSON, no extra text."""
                 "expected_impact": "Better learning environment and resource utilization",
                 "fairness_note": "Resources accessible to all students equally"
             },
-            "default": {
-                "recommendation": f"Address student concerns regarding {theme} based on {sentiment} feedback",
+            "resource": {
+                "recommendation": "Expand access to digital research databases and physical learning materials",
+                "priority": "high",
+                "action_items": [
+                    "Procure subscriptions for top-tier research journals",
+                    "Implement a 24/7 digital retrieval system for materials",
+                    "Audit current resource availability vs student demand",
+                    "Create a request portal for specific textbook needs"
+                ],
+                "expected_impact": "Enhanced academic performance and reduced student frustration",
+                "fairness_note": "Equitable access to all digital and physical resources for all students"
+            },
+            "teaching": {
+                "recommendation": "Implement faculty development programs focused on active learning and clear communication",
+                "priority": "high",
+                "action_items": [
+                    "Organize monthly teaching excellence workshops",
+                    "Implement a peer-review system for classroom sessions",
+                    "Provide training on digital teaching tools and engagement",
+                    "Reward and recognize top-performing faculty members"
+                ],
+                "expected_impact": "Significant improvement in student engagement and course understanding",
+                "fairness_note": "Consistent teaching quality across all departments and faculty levels"
+            },
+            "support": {
+                "recommendation": "Strengthen academic advisory and student mental health support services",
+                "priority": "high",
+                "action_items": [
+                    "Increase the number of available academic advisors",
+                    "Launch a peer-mentoring program for first-year students",
+                    "Implement an online booking system for counselor appointments",
+                    "Conduct regular wellness workshops"
+                ],
+                "expected_impact": "Improved student retention and overall well-being",
+                "fairness_note": "Support services accessible to diverse student groups without prejudice"
+            },
+            "assignment": {
+                "recommendation": "Standardize assignment criteria and provide timely, constructive feedback",
                 "priority": "medium",
                 "action_items": [
-                    "Conduct detailed survey to understand specific issues",
-                    "Form a student-faculty committee to address concerns",
-                    "Implement improvements and track progress",
-                    "Regular feedback collection to measure impact"
+                    "Create clear rubrics for all major assignments",
+                    "Implement a 7-day turnaround policy for graded work",
+                    "Provide digital feedback tools for detailed comments",
+                    "Organize assignment clarification sessions"
                 ],
-                "expected_impact": "Improved student satisfaction",
-                "fairness_note": "All recommendations are inclusive and equitable"
+                "expected_impact": "Clearer expectations and better learning outcomes",
+                "fairness_note": "Transparent and objective grading systems for all students"
+            },
+            "default": {
+                "recommendation": f"Implement a comprehensive strategy to address student concerns regarding {theme}",
+                "priority": auto_priority,
+                "action_items": [
+                    f"Conduct a targeted survey on {theme} issues",
+                    f"Form a task force to review {theme} feedback",
+                    "Establish clear KPIs for improvement",
+                    "Provide monthly progress updates to students"
+                ],
+                "expected_impact": f"Measurable improvement in {theme} satisfaction scores",
+                "fairness_note": "Inclusive implementation strategy addressing all student demographics"
             }
         }
         
         # Match theme to demo recommendation
         theme_lower = theme.lower()
-        for key in demo_recs:
-            if key in theme_lower:
-                return demo_recs[key]
+        if "resource" in theme_lower: return demo_recs["resource"]
+        if "teach" in theme_lower: return demo_recs["teaching"]
+        if "support" in theme_lower: return demo_recs["support"]
+        if "feedback" in theme_lower: return demo_recs["support"]
+        if "assignment" in theme_lower: return demo_recs["assignment"]
+        if "place" in theme_lower: return demo_recs["placement"]
+        if "library" in theme_lower: return demo_recs["library"]
         
         return demo_recs["default"]
